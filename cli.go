@@ -1,64 +1,86 @@
 package main
 
 import (
-	"bytes"
 	"context"
 	"fmt"
-	"text/template"
+	"os"
+	"strings"
 	"time"
 
-	"github.com/charmbracelet/glamour"
+	tea "github.com/charmbracelet/bubbletea"
 	"github.com/solerf/gg/github"
+	"github.com/solerf/gg/tui"
 )
 
-type gg struct {
+type CloneCmd struct {
 	User    string `arg:"" required:"" help:"GitHub username"`
 	HomeDir string `optional:"" type:"path" short:"d" default:"$HOME" env:"HOME" help:"$HOME directory"`
+}
+
+type CreateCmd struct {
+	User           string `arg:"" required:"" help:"GitHub username"`
+	RepositoryName string `required:"" short:"r" help:"GitHub new repository name"`
+	Public         string `option:"" optional:"" short:"v" default:"public" help:"GitHub new repository visibility"`
+	HomeDir        string `optional:"" type:"path" short:"d" default:"$HOME" env:"HOME" help:"$HOME directory"`
+}
+
+type gg struct {
+	Clone  CloneCmd  `cmd:"" help:"select repository to be cloned"`
+	Create CreateCmd `cmd:"" help:"create a new repository at remote"`
+	Debug  bool      `optional:"" long:"debug" default:"false" help:"debug logs to file"`
 }
 
 var description = "List GitHub user repositories"
 var cli = &gg{}
 
-func (g *gg) Run() error {
-	client, err := github.Client(g.HomeDir, g.User)
+func (g *CloneCmd) Run(debug bool) error {
+	curDir, err := os.Getwd()
 	if err != nil {
 		return err
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	client, err := github.NewClient(g.HomeDir, g.User)
+	if err != nil {
+		return err
+	}
+
+	model, err := tui.NewModel(debug, curDir, g.HomeDir, g.User, client)
+	if err != nil {
+		return err
+	}
+
+	p := tea.NewProgram(model)
+	m, err := p.Run()
+	if err != nil {
+		fmt.Printf("Alas, there's been an error: %v", err)
+		return err
+	}
+
+	switch tm := m.(type) {
+	case tui.Model:
+		if tm.Done {
+			// keep the result on stdout
+			fmt.Println(m.View())
+		}
+	}
+
+	return nil
+}
+
+func (g *CreateCmd) Run(debug bool) error {
+	client, err := github.NewClient(g.HomeDir, g.User)
+	if err != nil {
+		return err
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*15)
 	defer cancel()
 
-	repos, err := client.Repos(ctx, client.Config.User)
+	repository, err := client.CreateRepository(ctx, g.RepositoryName, strings.ToLower(g.Public) != "public")
 	if err != nil {
 		return err
 	}
 
-	tmplFile := "_output.md.tmpl"
-	tmpl, err := template.ParseFiles(tmplFile)
-	if err != nil {
-		return err
-	}
-
-	var bbuffer bytes.Buffer
-	err = tmpl.Execute(&bbuffer, repos)
-	if err != nil {
-		return err
-	}
-
-	renderer, err := glamour.NewTermRenderer(
-		glamour.WithStylePath("dark"),
-		glamour.WithWordWrap(120),
-		glamour.WithInlineTableLinks(true),
-	)
-	if err != nil {
-		return err
-	}
-
-	out, err := renderer.Render(bbuffer.String())
-	if err != nil {
-		return err
-	}
-	fmt.Print(out)
-
+	fmt.Printf("Created repository %s\n", repository.FullName)
 	return nil
 }
