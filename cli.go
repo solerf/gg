@@ -20,7 +20,7 @@ type CloneCmd struct {
 type CreateCmd struct {
 	User           string `arg:"" required:"" help:"GitHub username"`
 	RepositoryName string `required:"" short:"r" help:"GitHub new repository name"`
-	Public         string `option:"" optional:"" short:"v" default:"public" help:"GitHub new repository visibility"`
+	Visibility     string `option:"" optional:"" short:"v" default:"public" help:"GitHub new repository visibility"`
 	HomeDir        string `optional:"" type:"path" short:"d" default:"$HOME" env:"HOME" help:"$HOME directory"`
 }
 
@@ -76,7 +76,7 @@ func (g *CreateCmd) Run(debug bool) error {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*15)
 	defer cancel()
 
-	repository, err := client.CreateRepository(ctx, g.RepositoryName, strings.ToLower(g.Public) != "public")
+	repository, err := client.CreateRepository(ctx, g.RepositoryName, strings.ToLower(g.Visibility) != "public")
 	if err != nil {
 		return err
 	}
