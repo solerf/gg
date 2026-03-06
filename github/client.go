@@ -20,10 +20,10 @@ type Client struct {
 	httpc  *http.Client
 }
 
-func NewClient(homeDir, gitUser string) (*Client, error) {
-	c, err := newConfig(homeDir, gitUser)
+func NewClient(homeDir, ptaPath, gitUser string) (*Client, error) {
+	c, err := newConfig(homeDir, ptaPath, gitUser)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("gh client: %w", err)
 	}
 
 	defTransport := http.DefaultTransport.(*http.Transport)
@@ -38,18 +38,18 @@ func NewClient(homeDir, gitUser string) (*Client, error) {
 func (gh *Client) ListRepositories(ctx context.Context, gitUser string) ([]Repository, error) {
 	request, err := http.NewRequestWithContext(ctx, http.MethodGet, fmt.Sprintf(searchRepositoriesUrl, gitUser), http.NoBody)
 	if err != nil {
-		return nil, fmt.Errorf("list repositories request: %w", err)
+		return nil, fmt.Errorf("gh client list repositories request: %w", err)
 	}
 
 	responseBody, err := gh.doRequest(request)
 	if err != nil {
-		return nil, fmt.Errorf("list repositories request: %w", err)
+		return nil, fmt.Errorf("gh clientlist repositories: %w", err)
 	}
 	defer responseBody.Close()
 
 	var ghr ghRepositories
 	if err = json.NewDecoder(responseBody).Decode(&ghr); err != nil {
-		return nil, fmt.Errorf("list repositories read response: %w", err)
+		return nil, fmt.Errorf("gh client list repositories decoder: %w", err)
 	}
 	return ghRepositoriesResponseToModel(ghr), nil
 }
@@ -60,23 +60,23 @@ func (gh *Client) CreateRepository(ctx context.Context, name string, private boo
 		"private": private,
 	})
 	if err != nil {
-		return nil, fmt.Errorf("create repository params: %w", err)
+		return nil, fmt.Errorf("gh client create repository params: %w", err)
 	}
 
 	request, err := http.NewRequestWithContext(ctx, http.MethodPost, createRepositoriesUrl, bytes.NewReader(body))
 	if err != nil {
-		return nil, fmt.Errorf("create repository request: %w", err)
+		return nil, fmt.Errorf("gh client create repository request: %w", err)
 	}
 
 	responseBody, err := gh.doRequest(request)
 	if err != nil {
-		return nil, fmt.Errorf("create repository call: %w", err)
+		return nil, fmt.Errorf("gh client create repository: %w", err)
 	}
 	defer responseBody.Close()
 
 	var ghr ghRepository
 	if err = json.NewDecoder(responseBody).Decode(&ghr); err != nil {
-		return nil, fmt.Errorf("create repository read response: %w", err)
+		return nil, fmt.Errorf("gh client create repository decoder: %w", err)
 	}
 	repository := ghRepositoryToModel(ghr)
 	return &repository, nil
@@ -84,11 +84,11 @@ func (gh *Client) CreateRepository(ctx context.Context, name string, private boo
 
 func (gh *Client) doRequest(request *http.Request) (io.ReadCloser, error) {
 	request.Header.Add("Accept", "application/vnd.github.v3+json")
-	request.Header.Add("Authorization", fmt.Sprintf("Bearer %v", gh.Config.PTA))
+	request.Header.Add("Authorization", fmt.Sprintf("Bearer %v", gh.Config.Pta))
 
 	response, err := gh.httpc.Do(request)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("processing request: %w", err)
 	}
 
 	if response.StatusCode >= http.StatusBadRequest {

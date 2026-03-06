@@ -181,7 +181,7 @@ func (m Model) View() string {
 	return view.String()
 }
 
-func NewModel(debug bool, curDir, homeDir, gitUser string, ghClient *github.Client) (*Model, error) {
+func NewModel(curDir, homeDir, gitUser string, ghClient *github.Client) (*Model, error) {
 	tbl := table.New(
 		table.WithColumns(repositoryTableCols),
 		table.WithFocused(true),
