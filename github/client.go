@@ -42,6 +42,7 @@ func (gh *Client) ListRepositories(ctx context.Context, gitUser string) ([]Repos
 	request.Header.Add("Accept", "application/vnd.github.v3+json")
 	request.Header.Add("Authorization", fmt.Sprintf("Bearer %v", gh.Config.PTA))
 
+	// TODO unify the `.Do` part
 	response, err := gh.httpc.Do(request)
 	if err != nil {
 		return nil, err
@@ -74,6 +75,8 @@ func (gh *Client) CreateRepository(ctx context.Context, name string, private boo
 	if err != nil {
 		return nil, err
 	}
+
+	// TODO unify the `.Do` part
 	request.Header.Add("Accept", "application/vnd.github.v3+json")
 	request.Header.Add("Authorization", fmt.Sprintf("Bearer %v", gh.Config.PTA))
 

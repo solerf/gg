@@ -27,7 +27,10 @@ type CreateCmd struct {
 type gg struct {
 	Clone  CloneCmd  `cmd:"" help:"select repository to be cloned"`
 	Create CreateCmd `cmd:"" help:"create a new repository at remote"`
-	Debug  bool      `optional:"" long:"debug" default:"false" help:"debug logs to file"`
+	// TODO add field to inform PTA if not from the default path
+	// PtaFile string `arg:"" optional:"" help:"Absolute path to user's PTA"`
+	// TODO properly implement debug
+	Debug bool `optional:"" long:"debug" default:"false" help:"debug logs to file"`
 }
 
 var description = "List GitHub user repositories"

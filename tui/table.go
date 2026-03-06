@@ -29,6 +29,7 @@ type repositoryTable struct {
 }
 
 func (rt *repositoryTable) SortInPlace(by sortField) {
+	// TODO improve this ordering with ASC/DESC from TUI
 	var sortF func(a, b github.Repository) int
 	switch by {
 	case sortNameField:
@@ -42,10 +43,10 @@ func (rt *repositoryTable) SortInPlace(by sortField) {
 	case sortDateField:
 		sortF = func(a, b github.Repository) int {
 			if a.LastUpdate.Before(b.LastUpdate) {
-				return -1
+				return 1
 			}
 			if a.LastUpdate.After(b.LastUpdate) {
-				return 1
+				return -1
 			}
 			return 0
 		}
@@ -69,6 +70,7 @@ func (rt *repositoryTable) refreshRows() {
 		case 1:
 			return rt.repositories[index].Lang
 		case 2:
+			// TODO change the date formatting?
 			return rt.repositories[index].LastUpdate.Format(time.RFC1123)
 		}
 		return ""
