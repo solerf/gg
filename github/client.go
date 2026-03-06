@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"time"
 )
@@ -37,46 +38,51 @@ func NewClient(homeDir, gitUser string) (*Client, error) {
 func (gh *Client) ListRepositories(ctx context.Context, gitUser string) ([]Repository, error) {
 	request, err := http.NewRequestWithContext(ctx, http.MethodGet, fmt.Sprintf(searchRepositoriesUrl, gitUser), http.NoBody)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("list repositories request: %w", err)
 	}
-	request.Header.Add("Accept", "application/vnd.github.v3+json")
-	request.Header.Add("Authorization", fmt.Sprintf("Bearer %v", gh.Config.PTA))
 
-	// TODO unify the `.Do` part
-	response, err := gh.httpc.Do(request)
+	responseBody, err := gh.doRequest(request)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("list repositories request: %w", err)
 	}
-	defer response.Body.Close()
+	defer responseBody.Close()
 
-	if response.StatusCode >= http.StatusBadRequest {
-		return nil, fmt.Errorf("bad response status: %v", response.Status)
-	}
-
-	var ghr ghRepositoriesResponse
-	if err = json.NewDecoder(response.Body).Decode(&ghr); err != nil {
-		return nil, err
+	var ghr ghRepositories
+	if err = json.NewDecoder(responseBody).Decode(&ghr); err != nil {
+		return nil, fmt.Errorf("list repositories read response: %w", err)
 	}
 	return ghRepositoriesResponseToModel(ghr), nil
 }
 
 func (gh *Client) CreateRepository(ctx context.Context, name string, private bool) (*Repository, error) {
-	params := map[string]interface{}{
+	body, err := json.Marshal(map[string]interface{}{
 		"name":    name,
 		"private": private,
-	}
-
-	body, err := json.Marshal(params)
+	})
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("create repository params: %w", err)
 	}
 
 	request, err := http.NewRequestWithContext(ctx, http.MethodPost, createRepositoriesUrl, bytes.NewReader(body))
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("create repository request: %w", err)
 	}
 
-	// TODO unify the `.Do` part
+	responseBody, err := gh.doRequest(request)
+	if err != nil {
+		return nil, fmt.Errorf("create repository call: %w", err)
+	}
+	defer responseBody.Close()
+
+	var ghr ghRepository
+	if err = json.NewDecoder(responseBody).Decode(&ghr); err != nil {
+		return nil, fmt.Errorf("create repository read response: %w", err)
+	}
+	repository := ghRepositoryToModel(ghr)
+	return &repository, nil
+}
+
+func (gh *Client) doRequest(request *http.Request) (io.ReadCloser, error) {
 	request.Header.Add("Accept", "application/vnd.github.v3+json")
 	request.Header.Add("Authorization", fmt.Sprintf("Bearer %v", gh.Config.PTA))
 
@@ -84,16 +90,9 @@ func (gh *Client) CreateRepository(ctx context.Context, name string, private boo
 	if err != nil {
 		return nil, err
 	}
-	defer response.Body.Close()
 
 	if response.StatusCode >= http.StatusBadRequest {
 		return nil, fmt.Errorf("bad response status: %v", response.Status)
 	}
-
-	var ghr ghRepository
-	if err = json.NewDecoder(response.Body).Decode(&ghr); err != nil {
-		return nil, err
-	}
-	repository := ghRepositoryToModel(ghr)
-	return &repository, nil
+	return response.Body, nil
 }

@@ -131,13 +131,13 @@ type ghRepository struct {
 	Score float64 `json:"score"`
 }
 
-type ghRepositoriesResponse struct {
+type ghRepositories struct {
 	TotalCount        int            `json:"total_count"`
 	IncompleteResults bool           `json:"incomplete_results"`
 	Items             []ghRepository `json:"items"`
 }
 
-func ghRepositoriesResponseToModel(ghRepos ghRepositoriesResponse) []Repository {
+func ghRepositoriesResponseToModel(ghRepos ghRepositories) []Repository {
 	repos := make([]Repository, 0, ghRepos.TotalCount)
 	for i := 0; i < len(ghRepos.Items); i++ {
 		repos = append(repos, ghRepositoryToModel(ghRepos.Items[i]))
