@@ -18,9 +18,9 @@ const (
 )
 
 var repositoryTableCols = []table.Column{
-	{Title: "[N]Name", Width: 40},
-	{Title: "[L]Lang", Width: 20},
-	{Title: "[U]Last Update", Width: 30},
+	{Title: "[N]Name"},
+	{Title: "[L]Lang"},
+	{Title: "[U]Last Update"},
 }
 
 type repositoryTable struct {
@@ -29,7 +29,6 @@ type repositoryTable struct {
 }
 
 func (rt *repositoryTable) SortInPlace(by sortField) {
-	// TODO improve this ordering with ASC/DESC from TUI
 	var sortF func(a, b github.Repository) int
 	switch by {
 	case sortNameField:

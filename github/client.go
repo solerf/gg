@@ -35,15 +35,15 @@ func NewClient(homeDir, ptaPath, gitUser string) (*Client, error) {
 	return &Client{Config: c, httpc: defHttpC}, nil
 }
 
-func (gh *Client) ListRepositories(ctx context.Context, gitUser string) ([]Repository, error) {
-	request, err := http.NewRequestWithContext(ctx, http.MethodGet, fmt.Sprintf(searchRepositoriesUrl, gitUser), http.NoBody)
+func (gh *Client) ListRepositories(ctx context.Context) ([]Repository, error) {
+	request, err := http.NewRequestWithContext(ctx, http.MethodGet, fmt.Sprintf(searchRepositoriesUrl, gh.Config.User), http.NoBody)
 	if err != nil {
 		return nil, fmt.Errorf("gh client list repositories request: %w", err)
 	}
 
 	responseBody, err := gh.doRequest(request)
 	if err != nil {
-		return nil, fmt.Errorf("gh clientlist repositories: %w", err)
+		return nil, fmt.Errorf("gh client list repositories: %w", err)
 	}
 	defer responseBody.Close()
 

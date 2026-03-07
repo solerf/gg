@@ -27,7 +27,7 @@ type gg struct {
 	HomeDir string `optional:"" type:"path" short:"d" default:"$HOME" env:"HOME" help:"$HOME directory"`
 	User    string `required:"" type:"string" short:"u" help:"GitHub username"`
 
-	PtaPath string `optional:"" type:"path" help:"Absolute path to user's PTA location" default:"$HOME/.config/git/pta"`
+	PtaPath string `optional:"" type:"path" help:"Absolute path to user's PTA location"`
 }
 
 var description = "List GitHub user repositories"
@@ -45,7 +45,7 @@ func (cl *CloneCmd) Run(gg *gg) error {
 		return err
 	}
 
-	model, err := tui.NewModel(curDir, gg.HomeDir, gg.User, client)
+	model, err := tui.NewModel(curDir, client)
 	if err != nil {
 		return err
 	}
@@ -53,8 +53,7 @@ func (cl *CloneCmd) Run(gg *gg) error {
 	p := tea.NewProgram(model)
 	m, err := p.Run()
 	if err != nil {
-		fmt.Printf("Alas, there's been an error: %v", err)
-		return err
+		return fmt.Errorf("running tui: %w", err)
 	}
 
 	switch tm := m.(type) {
