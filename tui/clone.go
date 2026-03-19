@@ -68,6 +68,8 @@ type triggerSpinnerMsg string
 type repositoryClonedMsg string
 
 type Model struct {
+	curDir string
+
 	ghClient *github.Client
 
 	repositoryTable *repositoryTable
@@ -109,6 +111,7 @@ func (m Model) Update(receivedMsg tea.Msg) (tea.Model, tea.Cmd) {
 
 			if m.tableModel.Cursor() != -1 && !m.textinputModel.Focused() {
 				m.selectedRepository = &m.repositoryTable.repositories[m.tableModel.Cursor()]
+				m.textinputModel.Placeholder = fmt.Sprintf("%v/%v", m.curDir, m.selectedRepository.Name)
 				m.textinputModel.Cursor.SetMode(cursor.CursorBlink)
 				m.textinputModel.Focus()
 			}
@@ -262,12 +265,12 @@ func NewModel(curDir string, ghClient *github.Client) (*Model, error) {
 	ti := textinput.New()
 	ti.CharLimit = 80
 	ti.Width = 80
-	ti.Placeholder = curDir
 	ti.Cursor.Style = lipgloss.NewStyle().Foreground(lipgloss.Color("57"))
 	ti.TextStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("57"))
 	ti.PromptStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("57"))
 
 	return &Model{
+		curDir:         curDir,
 		ghClient:       ghClient,
 		tableModel:     tbl,
 		spinnerModel:   spin,

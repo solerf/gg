@@ -91,8 +91,11 @@ func newRepositoriesTable(repositories []github.Repository) *repositoryTable {
 			repositories[i].LastUpdate.Format(time.RFC1123),
 		}
 	}
-	return &repositoryTable{
+
+	r := &repositoryTable{
 		rows:         rows,
 		repositories: repositories,
 	}
+	r.SortInPlace(sortDateField)
+	return r
 }
