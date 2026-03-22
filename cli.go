@@ -12,7 +12,7 @@ import (
 	"github.com/solerf/gg/tui"
 )
 
-type CloneCmd struct {
+type ReposCmd struct {
 }
 
 type CreateCmd struct {
@@ -21,7 +21,7 @@ type CreateCmd struct {
 }
 
 type gg struct {
-	Clone  CloneCmd  `cmd:"" help:"select repository to be cloned"`
+	Repos  ReposCmd  `cmd:"" help:"list repositories and allow cloning"`
 	Create CreateCmd `cmd:"" help:"create a new repository at remote"`
 
 	HomeDir string `optional:"" type:"path" short:"d" default:"$HOME" env:"HOME" help:"$HOME directory"`
@@ -33,7 +33,7 @@ type gg struct {
 var description = "List GitHub user repositories"
 var cli = &gg{}
 
-func (cl *CloneCmd) Run(gg *gg) error {
+func (cl *ReposCmd) Run(gg *gg) error {
 	// the gg is auto injected
 	curDir, err := os.Getwd()
 	if err != nil {
