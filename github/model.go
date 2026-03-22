@@ -8,6 +8,7 @@ type Repository struct {
 	User          string    `json:"user"`
 	FullName      string    `json:"fullname"`
 	Name          string    `json:"name"`
+	Visibility    string    `json:"visibility"`
 	DefaultBranch string    `json:"default_branch"`
 	Lang          string    `json:"lang"`
 	CloneUrl      string    `json:"clone_url"`
@@ -146,16 +147,21 @@ func ghRepositoriesResponseToModel(ghRepos ghRepositories) []Repository {
 }
 
 func ghRepositoryToModel(ghRepo ghRepository) Repository {
-	lang := ""
-	langP := ghRepo.Language
-	if langP != nil {
-		lang = *langP
+	var lang string
+	if ghRepo.Language != nil {
+		lang = *ghRepo.Language
+	}
+
+	visibility := "public"
+	if ghRepo.Private {
+		visibility = "private"
 	}
 
 	return Repository{
 		User:          ghRepo.Owner.Login,
 		FullName:      ghRepo.FullName,
 		Name:          ghRepo.Name,
+		Visibility:    visibility,
 		DefaultBranch: ghRepo.DefaultBranch,
 		Lang:          lang,
 		CloneUrl:      ghRepo.SshUrl,

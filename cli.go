@@ -30,7 +30,7 @@ type gg struct {
 	PtaPath string `optional:"" type:"path" help:"Absolute path to user's PTA location"`
 }
 
-var description = "List GitHub user repositories"
+var description = "Details from GitHub user repositories"
 var cli = &gg{}
 
 func (cl *ReposCmd) Run(gg *gg) error {
