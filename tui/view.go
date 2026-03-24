@@ -107,7 +107,7 @@ func NewModel(curDir string, ghClient *github.Client) (Model, error) {
 	listModel := list.New(nil, itemDelegate{}, 20, 15)
 	listModel.SetFilteringEnabled(true)
 	listModel.SetShowTitle(false)
-	listModel.SetShowHelp(true)
+	listModel.SetShowHelp(false)
 	listModel.SetShowStatusBar(false)
 	listModel.SetShowTitle(false)
 	listModel.SetShowFilter(true)
