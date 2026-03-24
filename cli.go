@@ -58,7 +58,7 @@ func (cl *ReposCmd) Run(gg *gg) error {
 
 	switch tm := m.(type) {
 	case tui.Model:
-		if tm.Done {
+		if tm.GitCloneFinished {
 			// keep the result on stdout
 			fmt.Println(m.View())
 		}
