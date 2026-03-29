@@ -24,13 +24,13 @@ var (
 	highlightStyle = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("30"))
 
 	listHighlightStyle = highlightStyle.
-		BorderForeground(lipgloss.Color("30")).
-		Border(lipgloss.NormalBorder(), false, false, false, true).
-		Padding(0, 0, 0, 0)
+				BorderForeground(lipgloss.Color("30")).
+				Border(lipgloss.NormalBorder(), false, false, false, true).
+				Padding(0, 0, 0, 0)
 
 	listInfoStyle = listHighlightStyle.
-		Foreground(lipgloss.Color("245")).
-		Padding(0, 0, 0, 4)
+			Foreground(lipgloss.Color("245")).
+			Padding(0, 0, 0, 4)
 
 	listNotHighlightStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("251"))
 
@@ -166,7 +166,7 @@ func (m Model) Update(receivedMsg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 
 			// otherwise update selection from list
-			i := m.repositories.Items()[m.repositories.Index()].(item)
+			i := m.repositories.Items()[m.repositories.GlobalIndex()].(item)
 			m.targetRepository = &i.r
 			m.textinputModel.Placeholder = fmt.Sprintf("%v/%v", m.curDir, i.r.Name)
 			m.textinputModel.Focus()

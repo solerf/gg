@@ -50,18 +50,8 @@ func (cl *ReposCmd) Run(gg *gg) error {
 		return err
 	}
 
-	p := tea.NewProgram(model)
-	m, err := p.Run()
-	if err != nil {
+	if _, err = tea.NewProgram(model).Run(); err != nil {
 		return fmt.Errorf("running tui: %w", err)
-	}
-
-	switch tm := m.(type) {
-	case tui.Model:
-		if tm.GitCloneFinished {
-			// keep the result on stdout
-			fmt.Println(m.View())
-		}
 	}
 	return nil
 }
