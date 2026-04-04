@@ -12,7 +12,7 @@ import (
 	"github.com/solerf/gg/tui"
 )
 
-type ReposCmd struct {
+type ListCmd struct {
 }
 
 type CreateCmd struct {
@@ -21,7 +21,7 @@ type CreateCmd struct {
 }
 
 type gg struct {
-	Repos  ReposCmd  `cmd:"" help:"list repositories and allow cloning"`
+	List   ListCmd   `cmd:"" help:"list repositories and allow cloning"`
 	Create CreateCmd `cmd:"" help:"create a new repository at remote"`
 
 	HomeDir string `optional:"" type:"path" short:"d" default:"$HOME" env:"HOME" help:"$HOME directory"`
@@ -33,7 +33,7 @@ type gg struct {
 var description = "Details from GitHub user repositories"
 var cli = &gg{}
 
-func (cl *ReposCmd) Run(gg *gg) error {
+func (l *ListCmd) Run(gg *gg) error {
 	// the gg is auto injected
 	curDir, err := os.Getwd()
 	if err != nil {
@@ -56,7 +56,7 @@ func (cl *ReposCmd) Run(gg *gg) error {
 	return nil
 }
 
-func (cr *CreateCmd) Run(gg *gg) error {
+func (c *CreateCmd) Run(gg *gg) error {
 	// the gg is auto injected
 	client, err := github.NewClient(gg.HomeDir, gg.PtaPath, gg.User)
 	if err != nil {
@@ -66,7 +66,7 @@ func (cr *CreateCmd) Run(gg *gg) error {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*15)
 	defer cancel()
 
-	repository, err := client.CreateRepository(ctx, cr.RepositoryName, strings.ToLower(cr.Visibility) != "public")
+	repository, err := client.CreateRepository(ctx, c.RepositoryName, strings.ToLower(c.Visibility) != "public")
 	if err != nil {
 		return err
 	}
