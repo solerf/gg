@@ -72,5 +72,7 @@ func (c *CreateCmd) Run(gg *gg) error {
 	}
 
 	fmt.Printf("Created repository %s\n", repository.FullName)
+	fmt.Printf("- %s\n", repository.HtmlUrl)
+	fmt.Printf("- %s\n", repository.CloneUrl)
 	return nil
 }
