@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"regexp"
 	"time"
 )
 
@@ -36,22 +37,61 @@ func NewClient(homeDir, ptaPath, gitUser string) (*Client, error) {
 }
 
 func (gh *Client) ListRepositories(ctx context.Context) ([]Repository, error) {
-	request, err := http.NewRequestWithContext(ctx, http.MethodGet, fmt.Sprintf(searchRepositoriesUrl, gh.Config.User), http.NoBody)
-	if err != nil {
-		return nil, fmt.Errorf("gh client list repositories request: %w", err)
+	var nextLinkRegex = regexp.MustCompile("<(.+)>; rel=\"next\".+")
+
+	extractNextLink := func(headerLink string) string {
+		// <https://api.github.com/search/repositories?q=user%3Asolerf&page=2>; rel="next", <https://api.github.com/search/repositories?q=user%3Asolerf&page=2>; rel="last"
+		if len(headerLink) > 0 {
+			submatch := nextLinkRegex.FindStringSubmatch(headerLink)
+			if len(submatch) > 1 {
+				return submatch[1]
+			}
+		}
+		return ""
 	}
 
-	responseBody, err := gh.doRequest(request)
-	if err != nil {
-		return nil, fmt.Errorf("gh client list repositories: %w", err)
-	}
-	defer responseBody.Close()
+	makeRequest := func(url string) ([]Repository, string, error) {
+		request, err := http.NewRequestWithContext(ctx, http.MethodGet, url, http.NoBody)
+		if err != nil {
+			return nil, "", fmt.Errorf("gh client list repositories request: %w", err)
+		}
 
-	var ghr ghRepositories
-	if err = json.NewDecoder(responseBody).Decode(&ghr); err != nil {
-		return nil, fmt.Errorf("gh client list repositories decoder: %w", err)
+		response, err := gh.doRequest(request)
+		if err != nil {
+			return nil, "", fmt.Errorf("gh client list repositories: %w", err)
+		}
+
+		var buff bytes.Buffer
+		_, err = io.Copy(&buff, response.Body)
+		if err != nil {
+			return nil, "", fmt.Errorf("gh client repository read response: %w", err)
+		}
+		defer response.Body.Close()
+
+		var ghr ghRepositories
+		if err = json.NewDecoder(&buff).Decode(&ghr); err != nil {
+			return nil, "", fmt.Errorf("gh client list repositories decoder: %w", err)
+		}
+
+		nextPage := extractNextLink(response.Header.Get("Link"))
+		return ghRepositoriesResponseToModel(ghr), nextPage, nil
 	}
-	return ghRepositoriesResponseToModel(ghr), nil
+
+	repos, nextPage, err := makeRequest(fmt.Sprintf(searchRepositoriesUrl, gh.Config.User))
+	if err != nil {
+		return nil, err
+	}
+	result := append([]Repository{}, repos...)
+
+	for len(nextPage) != 0 {
+		repos, nextPage, err = makeRequest(nextPage)
+		if err != nil {
+			return nil, err
+		}
+		result = append(result, repos...)
+	}
+
+	return result, nil
 }
 
 func (gh *Client) CreateRepository(ctx context.Context, name string, private bool) (*Repository, error) {
@@ -68,21 +108,27 @@ func (gh *Client) CreateRepository(ctx context.Context, name string, private boo
 		return nil, fmt.Errorf("gh client create repository request: %w", err)
 	}
 
-	responseBody, err := gh.doRequest(request)
+	response, err := gh.doRequest(request)
 	if err != nil {
 		return nil, fmt.Errorf("gh client create repository: %w", err)
 	}
-	defer responseBody.Close()
+
+	var buff bytes.Buffer
+	_, err = io.Copy(&buff, response.Body)
+	if err != nil {
+		return nil, fmt.Errorf("gh client repository read response: %w", err)
+	}
+	defer response.Body.Close()
 
 	var ghr ghRepository
-	if err = json.NewDecoder(responseBody).Decode(&ghr); err != nil {
+	if err = json.NewDecoder(&buff).Decode(&ghr); err != nil {
 		return nil, fmt.Errorf("gh client create repository decoder: %w", err)
 	}
 	repository := ghRepositoryToModel(ghr)
 	return &repository, nil
 }
 
-func (gh *Client) doRequest(request *http.Request) (io.ReadCloser, error) {
+func (gh *Client) doRequest(request *http.Request) (*http.Response, error) {
 	request.Header.Add("Accept", "application/vnd.github.v3+json")
 	request.Header.Add("Authorization", fmt.Sprintf("Bearer %v", gh.Config.Pta))
 
@@ -94,5 +140,5 @@ func (gh *Client) doRequest(request *http.Request) (io.ReadCloser, error) {
 	if response.StatusCode >= http.StatusBadRequest {
 		return nil, fmt.Errorf("bad response status: %v", response.Status)
 	}
-	return response.Body, nil
+	return response, nil
 }
