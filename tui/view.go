@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"io"
 	"path"
-	"strings"
 	"time"
 
 	"github.com/charmbracelet/bubbles/cursor"
@@ -19,7 +18,9 @@ import (
 
 var (
 	spinnerStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("30")).Bold(true)
-	errStyle     = lipgloss.NewStyle().Foreground(lipgloss.Color("9"))
+	errStyle     = lipgloss.NewStyle().Foreground(lipgloss.Color("9")).MaxHeight(3)
+
+	finishMsgStyle = highlightStyle.Height(1)
 
 	highlightStyle = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("30"))
 
@@ -31,6 +32,9 @@ var (
 	listInfoStyle = listHighlightStyle.
 			Foreground(lipgloss.Color("245")).
 			Padding(0, 0, 0, 4)
+
+	listInfoPaddingBottomStyle = listInfoStyle.
+					PaddingBottom(1)
 
 	listNotHighlightStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("251"))
 
@@ -49,7 +53,15 @@ type repositoryClonedMsg string
 type triggerSpinnerMsg string
 
 type item struct {
-	r github.Repository
+	r            github.Repository
+	renderedName string
+}
+
+func newItem(r github.Repository) item {
+	return item{
+		r:            r,
+		renderedName: normalStyle.Render(fmt.Sprintf("%s", r.Name)),
+	}
 }
 
 func (i item) FilterValue() string {
@@ -65,14 +77,14 @@ func (d itemDelegate) Update(_ tea.Msg, _ *list.Model) tea.Cmd {
 }
 func (d itemDelegate) Render(w io.Writer, m list.Model, index int, listItem list.Item) {
 	i := listItem.(item)
-	content := normalStyle.Render(fmt.Sprintf("%s", i.r.Name))
+	content := i.renderedName
 	if index == m.Index() {
 		info := lipgloss.JoinVertical(lipgloss.Left,
 			listInfoStyle.Render(i.r.FullName),
 			lipgloss.JoinHorizontal(lipgloss.Left, listInfoStyle.Render("Last Update: "), listNotHighlightStyle.Render(i.r.LastUpdate.Format(time.RFC3339))),
 			lipgloss.JoinHorizontal(lipgloss.Left, listInfoStyle.Render("Visibility: "), listNotHighlightStyle.Render(i.r.Visibility)),
 			lipgloss.JoinHorizontal(lipgloss.Left, listInfoStyle.Render("Clone: "), listNotHighlightStyle.Render(i.r.CloneUrl)),
-			lipgloss.JoinHorizontal(lipgloss.Left, listInfoStyle.PaddingBottom(1).Render("Web: "), listNotHighlightStyle.Render(i.r.HtmlUrl)),
+			lipgloss.JoinHorizontal(lipgloss.Left, listInfoPaddingBottomStyle.Render("Web: "), listNotHighlightStyle.Render(i.r.HtmlUrl)),
 		)
 		content = fmt.Sprintf("%s\n%s", listHighlightStyle.PaddingTop(1).Render(i.r.Name), info)
 	}
@@ -89,7 +101,7 @@ type Model struct {
 
 	repositories list.Model
 
-	textinputModel textinput.Model
+	textInputModel textinput.Model
 
 	targetRepository *github.Repository
 	targetDirToClone string
@@ -103,15 +115,21 @@ type Model struct {
 
 func NewModel(curDir string, ghClient *github.Client) (Model, error) {
 	spin := spinner.New(spinner.WithStyle(spinnerStyle))
+	return Model{
+		curDir:       curDir,
+		ghClient:     ghClient,
+		spinnerModel: spin,
+	}, nil
+}
 
-	listModel := list.New(nil, itemDelegate{}, 20, 15)
-	listModel.SetFilteringEnabled(true)
+func initRepositoriesAndTextInput(items []list.Item, width int, height int) (list.Model, textinput.Model) {
+	listModel := list.New(items, itemDelegate{}, width, height/3)
 	listModel.SetShowTitle(false)
 	listModel.SetShowHelp(false)
 	listModel.SetShowStatusBar(false)
 	listModel.SetShowTitle(false)
+	listModel.SetFilteringEnabled(true)
 	listModel.SetShowFilter(true)
-	listModel.SetHeight(1)
 
 	txtInput := textinput.New()
 	txtInput.CharLimit = 80
@@ -120,14 +138,7 @@ func NewModel(curDir string, ghClient *github.Client) (Model, error) {
 	txtInput.Cursor.SetMode(cursor.CursorBlink)
 	txtInput.TextStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("30"))
 	txtInput.PromptStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("30"))
-
-	return Model{
-		curDir:         curDir,
-		ghClient:       ghClient,
-		spinnerModel:   spin,
-		repositories:   listModel,
-		textinputModel: txtInput,
-	}, nil
+	return listModel, txtInput
 }
 
 func (m Model) Init() tea.Cmd {
@@ -138,54 +149,53 @@ func (m Model) Update(receivedMsg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := receivedMsg.(type) {
 
 	case tea.KeyMsg:
-		switch keypress := msg.String(); keypress {
+		if !m.loading {
+			switch keypress := msg.String(); keypress {
 
-		case "esc":
-			if m.textinputModel.Focused() {
-				// undo selection
-				m.textinputModel.Blur()
-				m.textinputModel.Placeholder = ""
-				m.targetRepository = nil
-				return m, nil
-			}
+			case "esc":
+				if m.textInputModel.Focused() {
+					// undo selection
+					m.textInputModel.Blur()
+					m.textInputModel.Placeholder = ""
+					m.targetRepository = nil
+					return m, nil
+				}
 
-			var cmd tea.Cmd
-			m.repositories, cmd = m.repositories.Update(receivedMsg)
-			return m, cmd
-
-		case "enter", "tab":
-			if m.textinputModel.Focused() && keypress == "tab" {
-				// complete with placeholder
-				m.textinputModel.SetValue(m.textinputModel.Placeholder)
-				return m, nil
-			}
-
-			if m.textinputModel.Focused() && keypress == "enter" {
-				// finish and trigger gh clone
-				return m, tea.Sequence(triggerSpinnerCmd("Cloning..."), cloneGitHubCmd(m.targetRepository, m.textinputModel.Value()))
-			}
-
-			// otherwise update selection from list
-			i := m.repositories.Items()[m.repositories.GlobalIndex()].(item)
-			m.targetRepository = &i.r
-			m.textinputModel.Placeholder = fmt.Sprintf("%v/%v", m.curDir, i.r.Name)
-			m.textinputModel.Focus()
-			return m, nil
-
-		default:
-			var cmd tea.Cmd
-			if m.textinputModel.Focused() && keypress != "ctrl+c" {
-				m.textinputModel, cmd = m.textinputModel.Update(receivedMsg)
-			} else {
+				var cmd tea.Cmd
 				m.repositories, cmd = m.repositories.Update(receivedMsg)
+				return m, cmd
+
+			case "enter", "tab":
+				if m.textInputModel.Focused() && keypress == "tab" {
+					// complete with placeholder
+					m.textInputModel.SetValue(m.textInputModel.Placeholder)
+					return m, nil
+				}
+
+				if m.textInputModel.Focused() && keypress == "enter" {
+					// finish and trigger gh clone
+					return m, tea.Sequence(triggerSpinnerCmd("Cloning..."), cloneGitHubCmd(m.targetRepository, m.textInputModel.Value()))
+				}
+
+				// otherwise update selection from list
+				i := m.repositories.Items()[m.repositories.GlobalIndex()].(item)
+				m.targetRepository = &i.r
+				m.textInputModel.Placeholder = fmt.Sprintf("%v/%v", m.curDir, i.r.Name)
+				m.textInputModel.Focus()
+				return m, nil
+
+			default:
+				var cmd tea.Cmd
+				if m.textInputModel.Focused() && keypress != "ctrl+c" {
+					m.textInputModel, cmd = m.textInputModel.Update(receivedMsg)
+				} else {
+					m.repositories, cmd = m.repositories.Update(receivedMsg)
+				}
+				return m, cmd
 			}
-			return m, cmd
 		}
-
 	case repositoriesFetchedMsg:
-		m.repositories.SetShowFilter(true)
-		m.repositories.SetItems(msg)
-
+		m.repositories, m.textInputModel = initRepositoriesAndTextInput(msg, m.wWidth, m.wHeight)
 		m.loading = false
 		m.status = ""
 		return m, nil
@@ -193,7 +203,7 @@ func (m Model) Update(receivedMsg tea.Msg) (tea.Model, tea.Cmd) {
 	case repositoryClonedMsg:
 		m.GitCloneFinished = true
 		m.loading = false
-		m.targetDirToClone = m.textinputModel.Value()
+		m.targetDirToClone = m.textInputModel.Value()
 		return m, tea.Quit
 
 	case triggerSpinnerMsg:
@@ -202,9 +212,12 @@ func (m Model) Update(receivedMsg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, m.spinnerModel.Tick
 
 	case spinner.TickMsg:
-		var cmd tea.Cmd
-		m.spinnerModel, cmd = m.spinnerModel.Update(msg)
-		return m, cmd
+		if m.loading {
+			var cmd tea.Cmd
+			m.spinnerModel, cmd = m.spinnerModel.Update(msg)
+			return m, cmd
+		}
+		return m, nil
 
 	case errMsg:
 		m.loading = false
@@ -215,44 +228,40 @@ func (m Model) Update(receivedMsg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.WindowSizeMsg:
 		m.wWidth = msg.Width
 		m.wHeight = msg.Height
-		m.repositories.SetHeight(m.wHeight / 3)
-		m.repositories.SetWidth(m.wWidth)
 		return m, nil
 	}
 
-	var cmd tea.Cmd
-	if m.textinputModel.Focused() {
-		// if focused we send the msgs (keys pressed) to be updated
-		m.textinputModel, cmd = m.textinputModel.Update(receivedMsg)
+	if !m.loading {
+		var cmd tea.Cmd
+		if m.textInputModel.Focused() {
+			// if focused we send the msgs (keys pressed) to be updated
+			m.textInputModel, cmd = m.textInputModel.Update(receivedMsg)
+			return m, cmd
+		}
+		m.repositories, cmd = m.repositories.Update(receivedMsg)
 		return m, cmd
 	}
-
-	m.repositories, cmd = m.repositories.Update(receivedMsg)
-	return m, cmd
+	return m, nil
 }
 
 func (m Model) View() string {
 	if m.GitCloneFinished {
-		return fmt.Sprintf("Cloned at %v, exiting...", highlightStyle.Height(1).Render(m.targetDirToClone))
+		return fmt.Sprintf("Cloned at %v, exiting...", finishMsgStyle.Render(m.targetDirToClone))
 	}
 
 	if m.err != nil {
-		return fmt.Sprintf("%v\n", errStyle.Width(m.wWidth).MaxHeight(3).Render(m.err.Error()))
+		return fmt.Sprintf("%v\n", errStyle.Width(m.wWidth).Render(m.err.Error()))
 	}
 
 	if m.loading {
 		return fmt.Sprintf("%v %v", m.spinnerModel.View(), m.status)
 	}
 
-	var viewBuilder strings.Builder
-	viewBuilder.WriteString(m.repositories.View())
-
+	targetRepoView := ""
 	if m.targetRepository != nil {
-		viewBuilder.WriteString(
-			fmt.Sprintf("\n\nClone [%s] at %s", highlightStyle.Render(m.targetRepository.Name), m.textinputModel.View()),
-		)
+		targetRepoView = fmt.Sprintf("\n\nClone [%s] at %s", highlightStyle.Render(m.targetRepository.Name), m.textInputModel.View())
 	}
-	return viewBuilder.String()
+	return fmt.Sprintf("%s%s", m.repositories.View(), targetRepoView)
 }
 
 func triggerSpinnerCmd(status string) tea.Cmd {
@@ -277,7 +286,7 @@ func fetchGitHubCmd(ghClient *github.Client) tea.Cmd {
 
 		items := make([]list.Item, len(ghRepositories))
 		for i, r := range ghRepositories {
-			items[i] = item{r: r}
+			items[i] = newItem(r)
 		}
 		return repositoriesFetchedMsg(items)
 	}
