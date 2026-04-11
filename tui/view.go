@@ -132,8 +132,8 @@ func initRepositoriesAndTextInput(items []list.Item, width int, height int) (lis
 	listModel.SetShowFilter(true)
 
 	txtInput := textinput.New()
-	txtInput.CharLimit = 80
-	txtInput.Width = 80
+	txtInput.CharLimit = 100
+	txtInput.Width = 100
 	txtInput.Cursor.Style = lipgloss.NewStyle().Foreground(lipgloss.Color("30"))
 	txtInput.Cursor.SetMode(cursor.CursorBlink)
 	txtInput.TextStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("30"))
@@ -157,6 +157,7 @@ func (m Model) Update(receivedMsg tea.Msg) (tea.Model, tea.Cmd) {
 					// undo selection
 					m.textInputModel.Blur()
 					m.textInputModel.Placeholder = ""
+					m.textInputModel.SetValue("")
 					m.targetRepository = nil
 					return m, nil
 				}
