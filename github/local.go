@@ -6,12 +6,9 @@ import (
 	"fmt"
 	"os/exec"
 	"strings"
-	"time"
 )
 
-func Clone(repository *Repository, destination string) error {
-	ctx, cancelFunc := context.WithTimeout(context.Background(), 1*time.Minute)
-	defer cancelFunc()
+func Clone(ctx context.Context, repository *Repository, destination string) error {
 	return run(ctx, "clone", repository.CloneUrl, destination)
 }
 

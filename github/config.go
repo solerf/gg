@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"path"
 	"path/filepath"
 	"strings"
 
@@ -21,6 +22,11 @@ type config struct {
 }
 
 func newConfig(homeDir, ptaPath, gitUser string) (*config, error) {
+	// path package vs filepath package, is that filepath depends on OS
+	if strings.ContainsAny(gitUser, `\/`) {
+		return nil, fmt.Errorf("invalid git username [%v]", gitUser)
+	}
+
 	configs, err := load(homeDir)
 	if err != nil {
 		return nil, fmt.Errorf("config: %w", err)
@@ -40,15 +46,17 @@ func newConfig(homeDir, ptaPath, gitUser string) (*config, error) {
 		}
 	}
 
-	if len(ptaPath) > 0 {
-		pta, err := loadPta(fmt.Sprintf("%s/%s.pat", ptaPath, gitUser))
+	if len(ptaPath) > 0 && filepath.Clean(ptaPath) != "." {
+		pta, err := loadPta(filepath.Join(ptaPath, gitUser+".pta"))
 		if err != nil {
 			return nil, fmt.Errorf("config from PTA path: %w", err)
 		}
 
 		if len(pta) > 0 {
 			// just ignore the return
-			_ = upsert(homeDir, gitUser, ptaPath)
+			if err = upsert(homeDir, gitUser, ptaPath); err != nil {
+				return nil, fmt.Errorf("failed to store config for [%v]: %w", gitUser, err)
+			}
 			return &config{
 				User:    gitUser,
 				PtaPath: ptaPath,
@@ -57,7 +65,7 @@ func newConfig(homeDir, ptaPath, gitUser string) (*config, error) {
 		}
 	}
 
-	defaultPtaDir := fmt.Sprintf("%v/.config/git/pta/%v.pta", homeDir, gitUser)
+	defaultPtaDir := path.Join(homeDir, ".config", "git", "pta", gitUser+".pta")
 	pta, err := loadPta(defaultPtaDir)
 	if err != nil {
 		return nil, fmt.Errorf("config impossible to set PTA: %w", err)

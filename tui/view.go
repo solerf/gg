@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"path"
 	"time"
 
 	"github.com/charmbracelet/bubbles/cursor"
@@ -33,8 +32,9 @@ var (
 			Foreground(lipgloss.Color("245")).
 			Padding(0, 0, 0, 4)
 
-	listInfoPaddingBottomStyle = listInfoStyle.
-					PaddingBottom(1)
+	listInfoPaddingTopStyle = listHighlightStyle.PaddingTop(1)
+
+	listInfoPaddingBottomStyle = listInfoStyle.PaddingBottom(1)
 
 	listNotHighlightStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("251"))
 
@@ -60,7 +60,7 @@ type item struct {
 func newItem(r github.Repository) item {
 	return item{
 		r:            r,
-		renderedName: normalStyle.Render(fmt.Sprintf("%s", r.Name)),
+		renderedName: normalStyle.Render(r.Name),
 	}
 }
 
@@ -86,7 +86,7 @@ func (d itemDelegate) Render(w io.Writer, m list.Model, index int, listItem list
 			lipgloss.JoinHorizontal(lipgloss.Left, listInfoStyle.Render("Clone: "), listNotHighlightStyle.Render(i.r.CloneUrl)),
 			lipgloss.JoinHorizontal(lipgloss.Left, listInfoPaddingBottomStyle.Render("Web: "), listNotHighlightStyle.Render(i.r.HtmlUrl)),
 		)
-		content = fmt.Sprintf("%s\n%s", listHighlightStyle.PaddingTop(1).Render(i.r.Name), info)
+		content = fmt.Sprintf("%s\n%s", listInfoPaddingTopStyle.Render(i.r.Name), info)
 	}
 	_, _ = fmt.Fprint(w, content)
 }
@@ -273,7 +273,7 @@ func triggerSpinnerCmd(status string) tea.Cmd {
 
 func fetchGitHubCmd(ghClient *github.Client) tea.Cmd {
 	return func() tea.Msg {
-		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 		defer cancel()
 
 		ghRepositories, err := ghClient.ListRepositories(ctx)
@@ -295,9 +295,12 @@ func fetchGitHubCmd(ghClient *github.Client) tea.Cmd {
 
 func cloneGitHubCmd(ghRepo *github.Repository, targetDir string) tea.Cmd {
 	return func() tea.Msg {
-		if err := github.Clone(ghRepo, targetDir); err != nil {
+		ctx, cancelF := context.WithTimeout(context.Background(), 1*time.Minute)
+		defer cancelF()
+
+		if err := github.Clone(ctx, ghRepo, targetDir); err != nil {
 			return errMsg{err}
 		}
-		return repositoryClonedMsg(path.Join(targetDir))
+		return repositoryClonedMsg(targetDir)
 	}
 }

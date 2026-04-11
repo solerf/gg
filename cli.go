@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"os"
-	"strings"
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -17,7 +16,7 @@ type ListCmd struct {
 
 type CreateCmd struct {
 	RepositoryName string `required:"" short:"r" help:"GitHub new repository name"`
-	Visibility     string `option:"" optional:"" short:"v" default:"public" help:"GitHub new repository visibility"`
+	Visibility     string `option:"" optional:"" short:"v" default:"public" enum:"public,private" help:"GitHub new repository visibility (private|public)"`
 }
 
 type gg struct {
@@ -66,7 +65,7 @@ func (c *CreateCmd) Run(gg *gg) error {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*15)
 	defer cancel()
 
-	repository, err := client.CreateRepository(ctx, c.RepositoryName, strings.ToLower(c.Visibility) != "public")
+	repository, err := client.CreateRepository(ctx, c.RepositoryName, c.Visibility != "public")
 	if err != nil {
 		return err
 	}

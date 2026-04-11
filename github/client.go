@@ -15,8 +15,9 @@ const (
 )
 
 type Client struct {
-	Config *config
-	httpc  *http.Client
+	httpc         *http.Client
+	authHeader    string
+	nextLinkRegex *regexp.Regexp
 }
 
 func NewClient(homeDir, ptaPath, gitUser string) (*Client, error) {
@@ -25,22 +26,27 @@ func NewClient(homeDir, ptaPath, gitUser string) (*Client, error) {
 		return nil, fmt.Errorf("gh client: %w", err)
 	}
 
-	defTransport := http.DefaultTransport.(*http.Transport)
-	defTransport.IdleConnTimeout = time.Minute * 5
-	defTransport.MaxConnsPerHost = 10
-	defTransport.MaxIdleConns = 5
-	defTransport.MaxIdleConnsPerHost = 5
+	defTransport := &http.Transport{
+		IdleConnTimeout:     time.Minute * 5,
+		MaxConnsPerHost:     10,
+		MaxIdleConns:        5,
+		MaxIdleConnsPerHost: 5,
+	}
+
 	defHttpC := &http.Client{Transport: defTransport}
-	return &Client{Config: c, httpc: defHttpC}, nil
+
+	return &Client{
+		httpc:         defHttpC,
+		authHeader:    fmt.Sprintf("Bearer %v", c.Pta),
+		nextLinkRegex: regexp.MustCompile("<(.+)>; rel=\"next\".+"),
+	}, nil
 }
 
 func (gh *Client) ListRepositories(ctx context.Context) ([]Repository, error) {
-	var nextLinkRegex = regexp.MustCompile("<(.+)>; rel=\"next\".+")
-
 	extractNextLink := func(headerLink string) string {
-		// <https://api.github.com/search/repositories?q=user%3Asolerf&page=2>; rel="next", <https://api.github.com/search/repositories?q=user%3Asolerf&page=2>; rel="last"
+		// <https://api.github.com/user/repos?page=2>; rel="next", <https://api.github.com/user/repos?page=2>; rel="last"
 		if len(headerLink) > 0 {
-			submatch := nextLinkRegex.FindStringSubmatch(headerLink)
+			submatch := gh.nextLinkRegex.FindStringSubmatch(headerLink)
 			if len(submatch) > 1 {
 				return submatch[1]
 			}
@@ -50,12 +56,16 @@ func (gh *Client) ListRepositories(ctx context.Context) ([]Repository, error) {
 
 	makeRequest := func(url string) ([]Repository, string, error) {
 		request, err := http.NewRequestWithContext(ctx, http.MethodGet, url, http.NoBody)
-		request.URL.Query().Add("per_page", "50")
+
 		if err != nil {
 			return nil, "", fmt.Errorf("gh client list repositories request: %w", err)
 		}
 
-		ghr, headerLink, err := doRequest[[]ghRepository](gh.httpc, request, gh.Config.Pta)
+		query := request.URL.Query()
+		query.Set("per_page", "50")
+		request.URL.RawQuery = query.Encode()
+
+		ghr, headerLink, err := doRequest[[]ghRepository](gh.httpc, request, gh.authHeader)
 		if err != nil {
 			return nil, "", fmt.Errorf("gh client list repositories: %w", err)
 		}
@@ -95,7 +105,7 @@ func (gh *Client) CreateRepository(ctx context.Context, name string, private boo
 		return nil, fmt.Errorf("gh client create repository request: %w", err)
 	}
 
-	ghr, _, err := doRequest[ghRepository](gh.httpc, request, gh.Config.Pta)
+	ghr, _, err := doRequest[ghRepository](gh.httpc, request, gh.authHeader)
 	if err != nil {
 		return nil, fmt.Errorf("gh client create repository: %w", err)
 	}
@@ -103,9 +113,9 @@ func (gh *Client) CreateRepository(ctx context.Context, name string, private boo
 	return new(ghRepositoryToModel(ghr)), nil
 }
 
-func doRequest[T ghRepository | []ghRepository](httpc *http.Client, request *http.Request, pta string) (T, string, error) {
+func doRequest[T ghRepository | []ghRepository](httpc *http.Client, request *http.Request, authHeader string) (T, string, error) {
 	request.Header.Add("Accept", "application/vnd.github.v3+json")
-	request.Header.Add("Authorization", fmt.Sprintf("Bearer %v", pta))
+	request.Header.Add("Authorization", authHeader)
 
 	var t T
 
@@ -113,11 +123,11 @@ func doRequest[T ghRepository | []ghRepository](httpc *http.Client, request *htt
 	if err != nil {
 		return t, "", fmt.Errorf("processing request: %w", err)
 	}
+	defer response.Body.Close()
 
 	if response.StatusCode >= http.StatusBadRequest {
 		return t, "", fmt.Errorf("bad response status: %v", response.Status)
 	}
-	defer response.Body.Close()
 
 	if err = json.NewDecoder(response.Body).Decode(&t); err != nil {
 		return t, "", fmt.Errorf("processing response: %w", err)
